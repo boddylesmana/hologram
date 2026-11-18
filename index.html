@@ -1,0 +1,1039 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Hologram Tangan · Boddy Andrian Lesmana</title>
+<style>
+  :root{ --c:#35d6ff; --c2:#ffa53a; --dim:#5f8ea3; --bg:#02060c; }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--c);overflow:hidden;
+    font-family:Consolas,"Cascadia Mono","Courier New",monospace;user-select:none;}
+  #cam{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);
+    opacity:0;transition:opacity .8s;}
+  #cam.on{opacity:.30;}
+  body.nocam #cam.on{opacity:0;}
+  .tint{position:fixed;inset:0;pointer-events:none;
+    background:radial-gradient(ellipse at center,rgba(2,6,12,0) 30%,rgba(2,6,12,.85) 100%),
+               linear-gradient(rgba(0,40,70,.25),rgba(0,40,70,.25));}
+  #scene,#fx{position:fixed;inset:0;width:100%;height:100%;display:block;}
+  #scene{cursor:grab;touch-action:none;} #scene:active{cursor:grabbing;}
+  #fx{pointer-events:none;}
+  .scan{position:fixed;inset:0;pointer-events:none;opacity:.35;
+    background:repeating-linear-gradient(rgba(53,214,255,.05) 0 1px,transparent 1px 4px);}
+
+  /* sudut bingkai */
+  .corner{position:fixed;width:46px;height:46px;border:2px solid var(--c);opacity:.7;pointer-events:none;}
+  .corner.tl{left:12px;top:12px;border-right:none;border-bottom:none;}
+  .corner.tr{right:12px;top:12px;border-left:none;border-bottom:none;}
+  .corner.bl{left:12px;bottom:12px;border-right:none;border-top:none;}
+  .corner.br{right:12px;bottom:12px;border-left:none;border-top:none;}
+
+  .title{position:fixed;left:30px;top:26px;pointer-events:none;text-shadow:0 0 10px rgba(53,214,255,.7);}
+  .title b{display:block;font-size:clamp(1rem,3vw,1.35rem);letter-spacing:.28em;}
+  .title span{font-size:.72rem;color:var(--dim);letter-spacing:.14em;}
+  .title a{pointer-events:auto;color:var(--dim);font-size:.72rem;text-decoration:none;display:inline-block;margin-top:6px;}
+  .title a:hover{color:var(--c);}
+
+  .read{position:fixed;right:30px;top:26px;text-align:right;font-size:.74rem;line-height:1.7;
+    letter-spacing:.1em;color:var(--dim);pointer-events:none;}
+  .read b{color:var(--c);font-weight:400;display:inline-block;min-width:58px;}
+  .read .name{font-size:1.15rem;color:var(--c2);letter-spacing:.3em;text-shadow:0 0 10px rgba(255,165,58,.6);}
+  .led{display:inline-block;width:8px;height:8px;border-radius:9px;background:#3a4a55;margin-right:6px;}
+  .led.on{background:#3dff9e;box-shadow:0 0 8px #3dff9e;}
+
+  .help{position:fixed;left:30px;bottom:28px;font-size:.72rem;line-height:1.75;color:var(--dim);
+    pointer-events:none;max-width:330px;}
+  .help i{font-style:normal;color:var(--c);}
+
+  .help,.read > div:not(.name){transition:opacity .3s;}
+  body.lab-on .help, body.lab-on .read > div:not(.name){opacity:0;}
+  #lbl{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;}
+  #labels{position:fixed;inset:0;pointer-events:none;opacity:0;}
+  .lab{position:absolute;left:0;top:0;font-size:.7rem;line-height:1.35;color:#9fc3d3;padding:4px 8px;
+    background:rgba(4,18,30,.78);border-right:2px solid var(--c2);text-align:right;}
+  .lab.r{border-right:none;border-left:2px solid var(--c2);text-align:left;}
+  .lab b{display:block;color:var(--c);font-weight:400;font-size:.82rem;letter-spacing:.06em;}
+  @media (max-width:720px){ .lab{font-size:.58rem;padding:2px 5px;} .lab b{font-size:.66rem;} }
+
+  /* panel komponen terpilih */
+  .info{position:fixed;left:30px;top:50%;width:320px;transform:translateY(-50%);z-index:5;padding:14px 16px;
+    background:rgba(4,18,30,.9);border:1px solid rgba(53,214,255,.45);border-left:3px solid var(--c2);
+    box-shadow:0 0 26px rgba(53,214,255,.18);opacity:0;pointer-events:none;transition:opacity .25s;}
+  body.sel-on .info{opacity:1;pointer-events:auto;}
+  .info .k{font-size:.64rem;letter-spacing:.18em;color:var(--dim);}
+  .info b{display:block;margin:6px 0 3px;font-weight:400;font-size:1rem;letter-spacing:.05em;color:var(--c2);
+    text-shadow:0 0 10px rgba(255,165,58,.5);}
+  .info .d{display:block;font-size:.76rem;line-height:1.5;color:var(--c);}
+  .info p{margin:10px 0 12px;font-size:.78rem;line-height:1.65;color:#b7d3df;}
+  .info .nav{display:flex;gap:6px;}
+  .info button{flex:1;font:inherit;font-size:.68rem;letter-spacing:.1em;color:var(--dim);cursor:pointer;
+    background:rgba(4,18,30,.7);border:1px solid rgba(53,214,255,.3);padding:7px 6px;}
+  .info button:hover{color:var(--c);border-color:var(--c);}
+  .info #iClose{flex:0 0 36px;}
+  #tip{position:fixed;left:0;top:0;z-index:6;pointer-events:none;white-space:nowrap;font-size:.7rem;padding:3px 8px;
+    color:var(--c);background:rgba(4,18,30,.9);border:1px solid rgba(53,214,255,.4);opacity:0;}
+  @media (max-width:720px){
+    .info{left:12px;right:12px;width:auto;top:84px;transform:none;padding:10px 12px;}
+    .info p{font-size:.72rem;margin:6px 0 8px;line-height:1.5;}
+    body.sel-on .read > div:not(.name){opacity:0;}
+  }
+
+  .tabs{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);display:flex;gap:6px;z-index:4;}
+  .tabs button{font:inherit;font-size:.74rem;letter-spacing:.14em;color:var(--dim);cursor:pointer;
+    background:rgba(4,18,30,.7);border:1px solid rgba(53,214,255,.3);padding:8px 12px;transition:.15s;}
+  .tabs button:hover{color:var(--c);border-color:var(--c);}
+  .tabs button.active{color:#02060c;background:var(--c);border-color:var(--c);box-shadow:0 0 14px rgba(53,214,255,.6);}
+
+  .tools{position:fixed;right:30px;bottom:28px;display:grid;grid-template-columns:1fr 1fr;gap:6px;z-index:4;}
+  .tools .wide{grid-column:1 / -1;}
+  .tools button{font:inherit;font-size:.7rem;letter-spacing:.1em;color:var(--dim);cursor:pointer;
+    background:rgba(4,18,30,.7);border:1px solid rgba(53,214,255,.3);padding:7px 10px;}
+  .tools button:hover{color:var(--c);border-color:var(--c);}
+
+  .boot{position:fixed;inset:0;z-index:10;display:flex;align-items:center;justify-content:center;
+    background:rgba(2,6,12,.72);backdrop-filter:blur(3px);transition:opacity .5s;}
+  .boot.hide{opacity:0;pointer-events:none;}
+  .card{width:min(430px,calc(100% - 32px));border:1px solid var(--c);padding:26px 24px;text-align:center;
+    background:rgba(4,18,30,.85);box-shadow:0 0 40px rgba(53,214,255,.25), inset 0 0 30px rgba(53,214,255,.07);}
+  .card h1{margin:0 0 6px;font-size:1.3rem;letter-spacing:.3em;font-weight:400;text-shadow:0 0 12px var(--c);}
+  .card p{margin:0 0 18px;font-size:.8rem;color:var(--dim);line-height:1.6;}
+  .card button{font:inherit;letter-spacing:.2em;cursor:pointer;width:100%;padding:13px;margin-top:8px;
+    background:var(--c);color:#02060c;border:1px solid var(--c);font-weight:700;}
+  .card button.ghost{background:transparent;color:var(--c);font-weight:400;font-size:.78rem;}
+  .card button:disabled{opacity:.55;cursor:default;}
+  .card .msg{min-height:1.3em;margin-top:12px;font-size:.78rem;color:var(--c2);}
+
+  @media (max-width:720px){ .help{display:none;} .read{font-size:.66rem;right:22px;} .title{left:22px;}
+    .tools{flex-direction:row;right:auto;left:50%;transform:translateX(-50%);bottom:70px;} }
+</style>
+</head>
+<body>
+  <video id="cam" autoplay playsinline muted></video>
+  <div class="tint"></div>
+  <canvas id="scene"></canvas>
+  <canvas id="fx"></canvas>
+  <div class="scan"></div>
+  <canvas id="lbl"></canvas>
+  <div id="labels"></div>
+  <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+
+  <div class="title">
+    <b>HOLO · LAB</b>
+    <span>BODDY ANDRIAN LESMANA</span>
+  </div>
+
+  <div class="read">
+    <div class="name" id="objName">ROUTER</div>
+    <div><span class="led" id="led"></span><span id="stat">KAMERA MATI</span></div>
+    <div>TANGAN <b id="rHands">0</b></div>
+    <div>MODE <b id="rMode">-</b></div>
+    <div>PUTAR <b id="rRot">0° 0°</b></div>
+    <div>ZOOM <b id="rZoom">100%</b></div>
+    <div>URAI <b id="rExp">0%</b></div>
+    <div>FPS <b id="rFps">0</b></div>
+  </div>
+
+  <div class="help">
+    <i>🤏 Cubit 1 tangan</i> lalu geser = putar<br>
+    <i>🤏🤏 Cubit 2 tangan</i> jauhkan / dekatkan = zoom, putar seperti setir = miring<br>
+    <i>🖐🖐 Dua telapak terbuka</i> direntangkan = urai komponen<br>
+    <i>✌️ Tahan dua jari</i> = ganti objek<br>
+    <i>🤟 Tahan tiga jari</i> (telunjuk, tengah, manis) = jajarkan komponen satu per satu / gabung lagi<br>
+    <i>☝️ Tunjuk komponen</i> lalu tahan = pilih · tunjuk tempat kosong = lepas<br>
+    <i>🖐 Tahan satu telapak terbuka</i> = komponen kembali seperti semula<br>
+    Mouse: seret = putar · scroll = zoom · klik = pilih komponen · klik kanan = urai · klik tengah = ganti objek<br>
+    Keyboard: ← → objek · ↑ ↓ komponen · Esc · spasi · J = jajar · R = reset · M = tampilan
+  </div>
+
+  <div class="info" id="info">
+    <div class="k" id="iIdx"></div>
+    <b id="iT"></b><span class="d" id="iD"></span>
+    <p id="iM"></p>
+    <div class="nav"><button id="iPrev">‹ SEBELUM</button><button id="iNext">BERIKUT ›</button><button id="iClose" title="Tutup">✕</button></div>
+  </div>
+  <div id="tip"></div>
+
+  <div class="tabs" id="tabs"></div>
+  <div class="tools">
+    <button id="bExp">URAI</button>
+    <button id="bRow">JAJAR</button>
+    <button id="bReset">RESET</button>
+    <button id="bCam">LATAR KAMERA</button>
+    <button id="bSwap">GANTI KAMERA</button>
+    <button id="bSolid" class="wide">TAMPILAN: HOLOGRAM</button>
+  </div>
+
+  <div class="boot" id="boot">
+    <div class="card">
+      <h1>HOLO · LAB</h1>
+      <p>Hologram 3D yang dikendalikan gerakan tangan lewat webcam.<br>Duduk ± 50–80 cm dari kamera, pastikan tangan terkena cahaya.</p>
+      <button id="startBtn">AKTIFKAN SISTEM</button>
+      <button class="ghost" id="skipBtn">tanpa kamera (pakai mouse)</button>
+      <div class="msg" id="msg"></div>
+    </div>
+  </div>
+
+<script src="lib/three.min.js" onerror="var s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.min.js';document.head.appendChild(s)"></script>
+<script type="module">
+/* ================= pemuat model tangan (sama seperti index.html, tapi 2 tangan) ================= */
+const CDN="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
+const IS_LOCAL=/^(localhost$|127\.|192\.168\.|10\.|\[::1\])/.test(location.hostname);
+const SRC=[
+  {mod:CDN+"/vision_bundle.mjs", wasm:CDN+"/wasm",
+   model:"https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task"},
+  {mod:"./lib/vision_bundle.mjs", wasm:"lib/wasm", model:"models/hand_landmarker.task"}];
+if(IS_LOCAL) SRC.reverse();
+let mpPromise=null;
+function loadLandmarker(){
+  if(!mpPromise){
+    mpPromise=(async()=>{
+      let lastErr;
+      for(const s of SRC){ for(const delegate of ["GPU","CPU"]){
+        try{
+          const {HandLandmarker, FilesetResolver}=await import(s.mod);
+          const vision=await FilesetResolver.forVisionTasks(s.wasm);
+          return await HandLandmarker.createFromOptions(vision,{
+            baseOptions:{modelAssetPath:s.model, delegate}, runningMode:"VIDEO", numHands:2,
+            minHandDetectionConfidence:.4, minHandPresenceConfidence:.4, minTrackingConfidence:.4});
+        }catch(e){ lastErr=e; }
+      }}
+      throw lastErr;
+    })();
+    mpPromise.catch(()=>{ mpPromise=null; });
+  }
+  return mpPromise;
+}
+
+const $=id=>document.getElementById(id);
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const cam=$("cam"), fx=$("fx"), fctx=fx.getContext("2d");
+
+if(!window.THREE){
+  await new Promise(r=>{ const t0=Date.now(), iv=setInterval(()=>{
+    if(window.THREE||Date.now()-t0>15000){ clearInterval(iv); r(); } },50); });
+}
+
+/* ================= THREE ================= */
+let renderer;
+try{
+  renderer=new THREE.WebGLRenderer({canvas:$("scene"), antialias:true, alpha:true});
+}catch(e){
+  $("msg").textContent="Perangkat ini tidak mendukung WebGL, hologram tidak bisa ditampilkan.";
+  $("startBtn").disabled=true; $("skipBtn").disabled=true;
+  throw e;
+}
+renderer.setClearColor(0x000000,0);
+renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(50, 1, 0.1, 100);
+let W=1, H=1;
+function fit(){
+  W=innerWidth; H=innerHeight;
+  renderer.setSize(W,H); fx.width=W; fx.height=H; $("lbl").width=W; $("lbl").height=H;
+  camera.aspect=W/H; camera.position.z = W<H ? 11.5 : 7.5; camera.updateProjectionMatrix();
+}
+addEventListener("resize",fit); fit();
+
+const V3=THREE.Vector3, TAU=Math.PI*2;
+const CY=0x35d6ff, WH=0xc8f4ff, OR=0xffa53a;
+const lmat=(color,op)=>new THREE.LineBasicMaterial({color,transparent:true,opacity:op,
+  blending:THREE.AdditiveBlending,depthWrite:false});
+const edges=(g,color=CY,op=.9,ang=1)=>new THREE.LineSegments(new THREE.EdgesGeometry(g,ang),lmat(color,op));
+const wire=(g,color=CY,op=.3)=>new THREE.LineSegments(new THREE.WireframeGeometry(g),lmat(color,op));
+const dots=(g,color=WH,size=.035,op=.9)=>new THREE.Points(g,new THREE.PointsMaterial({color,size,
+  transparent:true,opacity:op,blending:THREE.AdditiveBlending,depthWrite:false}));
+function ring(r,color=CY,op=.8,seg=96){
+  const p=[]; for(let i=0;i<seg;i++){ const a=i/seg*TAU; p.push(new V3(Math.cos(a)*r,0,Math.sin(a)*r)); }
+  return new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(p),lmat(color,op));
+}
+function dashRing(r,n,color=CY,op=.7,fill=.6){
+  const p=[], sub=6;
+  for(let i=0;i<n;i++){ const a0=i/n*TAU, a1=a0+TAU/n*fill;
+    for(let k=0;k<sub;k++){ const u=a0+(a1-a0)*k/sub, v=a0+(a1-a0)*(k+1)/sub;
+      p.push(new V3(Math.cos(u)*r,0,Math.sin(u)*r), new V3(Math.cos(v)*r,0,Math.sin(v)*r)); } }
+  return new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(p),lmat(color,op));
+}
+/* tandai sebuah komponen: dir = arah saat diurai, spin = putaran sendiri (rad/detik), grow = membesar saat diurai */
+function part(o,{dir=[0,0,0],spin=[0,0,0],grow=0}={}){
+  const q=o.quaternion.clone(); o.rotation.order="ZXY"; o.quaternion.copy(q);
+  o.userData={home:o.position.clone(), dir:new V3(...dir), spin, grow};
+  return o;
+}
+const grp=(...kids)=>{ const g=new THREE.Group(); kids.forEach(k=>g.add(k)); return g; };
+
+/* tampilan NYATA: permukaan berwarna + lampu (garis hologram tetap ada) */
+const solids=[], decals=[]; let solidMode=false;
+scene.add(new THREE.AmbientLight(0xffffff,1.1));
+{ const d=new THREE.DirectionalLight(0xffffff,2.2); d.position.set(3,6,5); scene.add(d); }
+function setSolid(v){ solidMode=v; solids.forEach(m=>m.visible=v); decals.forEach(d=>d.m.color.set(v?d.solid:d.holo));
+  $("bSolid").textContent="TAMPILAN: "+(v?"NYATA":"HOLOGRAM"); }
+
+/* ---------- objek hologram ---------- */
+function buildGlobe(){
+  const g=new THREE.Group();
+  g.add(part(grp(wire(new THREE.SphereGeometry(1.5,24,16),CY,.2),
+                 dots(new THREE.IcosahedronGeometry(1.52,5),WH,.03,.8)),{spin:[0,.18,0],grow:.3}));
+  g.add(part(grp(edges(new THREE.IcosahedronGeometry(.7,1),OR,.9),
+                 dots(new THREE.IcosahedronGeometry(.7,1),OR,.06)),{spin:[.3,.5,0]}));
+  [[2.0,.5,.2,.5,.55],[2.35,-.9,1.1,-.35,-.6],[2.75,1.25,-.5,.25,1.0]].forEach(([r,tx,tz,sp,dy])=>{
+    const sat=edges(new THREE.OctahedronGeometry(.1),OR,1); sat.position.set(r,0,0);
+    const o=part(grp(ring(r,CY,.55),sat),{spin:[0,sp,0],dir:[0,dy,0],grow:.3});
+    o.rotation.x=tx; o.rotation.z=tz; g.add(o);
+  });
+  return g;
+}
+function buildReactor(){
+  const g=new THREE.Group();
+  const cyl=(r,h,n)=>new THREE.CylinderGeometry(r,r,h,n);
+  const torus=(r,t,a,b)=>{ const q=new THREE.TorusGeometry(r,t,a,b); q.rotateX(Math.PI/2); return q; };
+  g.add(part(grp(edges(cyl(.45,.3,24),WH,.9), dots(cyl(.3,.1,12),OR,.07)),{spin:[0,1.4,0]}));
+  g.add(part(wire(torus(.8,.1,8,40),CY,.45),{spin:[0,-.6,0],dir:[0,.45,0]}));
+  const coils=new THREE.Group();
+  for(let i=0;i<10;i++){ const a=i/10*TAU, b=edges(new THREE.BoxGeometry(.3,.34,.5),OR,.9);
+    b.position.set(Math.cos(a)*1.25,0,Math.sin(a)*1.25); b.lookAt(0,0,0); coils.add(b); }
+  g.add(part(coils,{spin:[0,.35,0],dir:[0,-.45,0]}));
+  g.add(part(wire(torus(1.75,.07,6,64),CY,.4),{spin:[0,.2,0],dir:[0,-1.2,0]}));
+  const top=edges(cyl(1.0,.06,6),CY,.9); top.position.y=.3;
+  g.add(part(top,{spin:[0,-.25,0],dir:[0,1.4,0]}));
+  const top2=edges(cyl(.55,.05,3),WH,.8); top2.position.y=.5;
+  g.add(part(top2,{spin:[0,.7,0],dir:[0,2.1,0]}));
+  const bot=edges(cyl(1.4,.06,8),CY,.9); bot.position.y=-.3;
+  g.add(part(bot,{spin:[0,.25,0],dir:[0,-2.0,0]}));
+  g.add(part(dashRing(2.15,16,OR,.7),{spin:[0,-.3,0],grow:.25}));
+  return g;
+}
+function buildDNA(){
+  const g=new THREE.Group();
+  const Hh=4.4, turns=2.2, r=.75, steps=48, chunks=4, per=steps/chunks;
+  const at=(i,ph)=>{ const u=i/steps, a=u*turns*TAU+ph; return new V3(Math.cos(a)*r,(u-.5)*Hh,Math.sin(a)*r); };
+  for(let c=0;c<chunks;c++){
+    const A=[],B=[],r1=[],r2=[],nodes=[];
+    for(let i=c*per;i<=(c+1)*per;i++){
+      const a=at(i,0), b=at(i,Math.PI); A.push(a); B.push(b);
+      if(i%2===0 && i<(c+1)*per){ const m=a.clone().lerp(b,.5); r1.push(a,m); r2.push(m,b); nodes.push(a,b); }
+    }
+    const geo=p=>new THREE.BufferGeometry().setFromPoints(p);
+    g.add(part(grp(new THREE.Line(geo(A),lmat(CY,.95)), new THREE.Line(geo(B),lmat(CY,.95)),
+      new THREE.LineSegments(geo(r1),lmat(WH,.5)), new THREE.LineSegments(geo(r2),lmat(OR,.7)),
+      dots(geo(nodes),WH,.08)),{spin:[0,.45,0],dir:[0,(c-1.5)*.4,0]}));
+  }
+  [1,-1].forEach(s=>{ const o=grp(ring(1.25,CY,.7),dashRing(1.45,12,OR,.6)); o.position.y=s*2.45;
+    g.add(part(o,{spin:[0,-.5*s,0],dir:[0,s*.8,0]})); });
+  return g;
+}
+function buildCube(){
+  const g=new THREE.Group();
+  const box=s=>new THREE.BoxGeometry(s,s,s);
+  g.add(part(edges(box(2.6),CY,.5)));
+  g.add(part(edges(box(1.7),OR,.9),{spin:[-.2,.3,.1]}));
+  g.add(part(grp(edges(box(.9),WH,.95),dots(box(.9),WH,.09)),{spin:[.5,-.4,.25]}));
+  for(const x of [-1,1]) for(const y of [-1,1]) for(const z of [-1,1]){
+    const c=edges(box(.34),CY,.95); c.position.set(x*1.3,y*1.3,z*1.3);
+    g.add(part(c,{dir:[x*.85,y*.85,z*.85],spin:[.6*x,.6*y,0]}));
+  }
+  [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]].forEach(n=>{
+    const p=grp(edges(new THREE.PlaneGeometry(1.5,1.5),CY,.7), edges(new THREE.PlaneGeometry(.7,.7),OR,.8));
+    p.position.set(n[0]*1.3,n[1]*1.3,n[2]*1.3); p.lookAt(n[0]*3,n[1]*3,n[2]*3);
+    g.add(part(p,{dir:[n[0]*1.5,n[1]*1.5,n[2]*1.5]}));
+  });
+  return g;
+}
+/* Router MikroTik hAP lite (model tower RB941-2nD-TC): tiap komponen punya label yang muncul saat diurai.
+   Sumbu: Y = tinggi, Z+ = sisi depan (port), X+ = sisi biru. PCB berdiri tegak sejajar sisi casing. */
+function buildRouter(){
+  const g=new THREE.Group(), GR=0x3dff9e, PX=-.36;          // PX = posisi PCB pada sumbu X
+  const box=(w,h,d)=>new THREE.BoxGeometry(w,h,d);
+  const lines=(p,color,op)=>new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(p),lmat(color,op));
+  const at=(o,x,y,z)=>{ o.position.set(x,y,z); return o; };
+  /* penjelasan panjang, tampil saat komponen dipilih */
+  const MORE={
+    "Casing biru (sisi kanan)":"Pelat plastik biru di sisi kanan. Bagian bawahnya melebar menjadi kaki, sehingga router bisa berdiri tegak di meja tanpa dudukan tambahan.",
+    "Casing putih (badan + sisi kiri)":"Badan utama router dari plastik. PCB dipasang berdiri di dalamnya, dan casing ini melindunginya dari debu, sentuhan, dan benturan ringan.",
+    "Panel depan":"Sisi yang menghadap pengguna. Di sini ada lubang untuk 4 port Ethernet, lampu pwr dan usr, tombol res/wps, dan lubang port power. Tulisan di panel menunjukkan nomor port: 1 untuk Internet, 2–4 untuk LAN.",
+    "Port Ethernet RJ45 (4 buah)":"Tempat mencolok kabel UTP berkonektor RJ45. Pada konfigurasi bawaan, port 1 disambungkan ke modem atau ISP (WAN), sedangkan port 2–4 dipakai komputer dan perangkat lain di jaringan lokal. Kecepatan tiap port maksimal 100 Mbps.",
+    "LED pwr & usr":"Lampu pwr menyala saat router mendapat listrik. Lampu usr bisa diatur dari RouterOS, misalnya untuk menandai aktivitas atau status tertentu.",
+    "Tombol res/wps":"Punya dua fungsi: menyambungkan perangkat WiFi lewat WPS saat router sedang menyala, dan mengembalikan konfigurasi ke pengaturan awal bila ditahan sambil router dinyalakan sampai lampu berkedip.",
+    "Port power microUSB":"Router ini memakai listrik 5 V lewat konektor microUSB, jadi selain dari adaptor bawaan bisa juga dinyalakan dari power bank atau port USB komputer.",
+    "Trafo Ethernet":"Disebut juga magnetics. Memisahkan rangkaian router dari kabel jaringan secara kelistrikan, sehingga lonjakan tegangan dan gangguan dari kabel tidak langsung masuk ke chip, sekaligus menjaga bentuk sinyal data.",
+    "CPU / SoC QCA9533":"Otak router. Satu chip Qualcomm Atheros QCA9533 berkecepatan 650 MHz ini sudah berisi prosesor, switch Ethernet, dan radio WiFi 2.4 GHz. Semua paket data yang lewat diproses di sini.",
+    "RAM 32 MB":"Memori sementara untuk RouterOS: tabel routing, daftar koneksi, antrean, dan proses lain disimpan di sini selama router menyala. Isinya hilang saat router dimatikan.",
+    "Flash 16 MB":"Penyimpanan permanen. Sistem operasi RouterOS, konfigurasi, dan file kecil lain tersimpan di sini dan tetap ada walau listrik dicabut.",
+    "Antena WiFi (2 buah)":"Dua antena dibuat langsung sebagai jalur tembaga di tepi PCB, tanpa antena luar. Keduanya memancarkan dan menerima sinyal WiFi 2.4 GHz (802.11b/g/n) dengan penguatan 1.5 dBi.",
+    "PCB (papan sirkuit)":"Papan berlapis tembaga tempat semua komponen disolder. Jalur-jalur tembaganya menghubungkan CPU, memori, port, dan antena. Di router ini PCB dipasang berdiri mengikuti bentuk casing."
+  };
+  const add=(o,pos,opt,t,d,anchor=[0,0,0])=>{ o.position.set(...pos); part(o,opt);
+    if(t) o.userData.label={t,d,a:new V3(...anchor),more:MORE[t]||""}; g.add(o); return o; };
+  /* E = garis hologram + permukaan berwarna (hanya terlihat di tampilan NYATA) */
+  const E=(geo,color,op,fill,fop=1,metal=.15,ang=1)=>{ const l=edges(geo,color,op,ang);
+    const m=new THREE.Mesh(geo,new THREE.MeshStandardMaterial({color:fill,roughness:.55,metalness:metal,
+      emissive:CY,emissiveIntensity:0,
+      transparent:fop<1,opacity:fop,depthWrite:fop>=1,polygonOffset:true,polygonOffsetFactor:1,polygonOffsetUnits:1}));
+    m.visible=solidMode; solids.push(m); return grp(l,m); };
+  const BLK=0x1b1e24, DIE=0x4a505a, PCBC=0x0d7a40, SIL=0xc3ccd6, CASE=0xf3f6f9, BLUE=0xa6cdf3;
+  const chip=(h,d,color)=>grp(E(box(.06,h,d),color,1,BLK), E(box(.07,h*.55,d*.55),WH,.7,DIE));
+
+  // pelat samping: persegi panjang dengan kaki yang melengkung ke depan
+  const side=()=>{ const s=new THREE.Shape(); s.moveTo(-1.37,-1.7); s.lineTo(1.8,-1.7);
+    s.quadraticCurveTo(1.42,-1.55,1.37,-.7); s.lineTo(1.37,1.7); s.lineTo(-1.37,1.7); s.closePath();
+    const q=new THREE.ExtrudeGeometry(s,{depth:.08,bevelEnabled:false,curveSegments:14});
+    q.rotateY(-Math.PI/2); q.translate(.04,0,0); return q; };
+  add(E(side(),CY,.9,BLUE,1,.1,25),[.69,0,0],{dir:[1.6,0,0]},
+    "Casing biru (sisi kanan)","Penutup samping, kakinya membuat router berdiri tegak",[0,1.0,0]);
+  add(grp(at(E(side(),WH,.6,CASE,1,.1,25),-.69,0,0), at(E(box(1.3,.06,2.67),WH,.45,CASE),0,1.67,-.035),
+          at(E(box(1.3,.06,2.67),WH,.45,CASE),0,-1.67,-.035), at(E(box(1.3,3.28,.06),WH,.45,CASE),0,0,-1.34)),
+    [0,0,0],{dir:[-1.6,0,0]},"Casing putih (badan + sisi kiri)","Rangka plastik yang melindungi PCB",[-.69,1.0,-.5]);
+
+  // panel depan: lubang port + tulisan seperti di router aslinya
+  { const s=new THREE.Shape(); s.moveTo(-.65,-1.62); s.lineTo(.65,-1.62); s.lineTo(.65,1.62); s.lineTo(-.65,1.62); s.closePath();
+    const h=new THREE.Path(); h.moveTo(-.36,-.78); h.lineTo(-.36,1.02); h.lineTo(.3,1.02); h.lineTo(.3,-.78); h.closePath(); s.holes.push(h);
+    const q=new THREE.ExtrudeGeometry(s,{depth:.04,bevelEnabled:false}); q.translate(0,0,-.02);
+    const cv=document.createElement("canvas"), S=400; cv.width=1.3*S; cv.height=3.24*S; const c=cv.getContext("2d");
+    const tx=(t,x,y,px,rot)=>{ c.save(); c.translate((x+.65)*S,(1.62-y)*S); if(rot) c.rotate(-Math.PI/2);
+      c.font=px+"px Arial,sans-serif"; c.fillText(t,0,0); c.restore(); };
+    c.fillStyle="#fff"; c.textAlign="center"; c.textBaseline="middle";
+    tx("hAP",-.03,1.3,120);
+    [4,3,2,1].forEach((n,i)=>tx(n,-.5,.78-i*.44,60,1));
+    tx("LAN",.47,.34,54,1); tx("Internet",.47,-.5,48,1);
+    c.textAlign="right"; tx("pwr",-.08,-.95,44); tx("usr",-.08,-1.08,44); tx("res/wps",-.08,-1.25,44); tx("power",-.08,-1.47,44);
+    const dm=new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(cv),transparent:true,depthWrite:false});
+    decals.push({m:dm,solid:0x7d8a96,holo:CY}); dm.color.set(solidMode?0x7d8a96:CY);
+    add(grp(E(q,WH,.7,CASE,1,.1), at(new THREE.Mesh(new THREE.PlaneGeometry(1.3,3.24),dm),0,0,.026)),
+      [0,0,1.3],{dir:[0,0,1.3]},"Panel depan","Lubang port, lampu indikator, dan tombol",[-.5,1.3,0]); }
+
+  // 4 port Ethernet bersusun tegak (port 1 paling bawah)
+  { const p=new THREE.Group(); for(let i=0;i<4;i++){ const y=.78-i*.44;
+      p.add(at(E(box(.6,.42,.7),CY,.95,SIL,1,.7),0,y,0), at(E(box(.44,.3,.72),WH,.5,BLK),0,y,0),
+            at(E(box(.07,.07,.02),GR,1,GR),.2,y-.14,.36)); }
+    add(p,[-.03,0,.95],{dir:[0,0,.6]},"Port Ethernet RJ45 (4 buah)","Port 1 = Internet (WAN), port 2–4 = LAN · 10/100 Mbps",[0,.78,.35]); }
+  add(grp(E(box(.2,.035,.06),GR,1,GR), at(E(box(.2,.035,.06),GR,1,GR),0,-.13,0)),[.12,-.95,1.3],{dir:[0,0,.95]},
+    "LED pwr & usr","Lampu daya dan lampu aktivitas");
+  { const c=new THREE.CylinderGeometry(.07,.07,.14,12); c.rotateX(Math.PI/2);
+    add(E(c,OR,1,0xdfe5ea),[.12,-1.25,1.27],{dir:[0,0,.95]},"Tombol res/wps","Reset ke pengaturan awal / sambung WPS"); }
+  add(grp(E(box(.11,.24,.3),OR,.95,SIL,1,.8),E(box(.05,.17,.31),WH,.6,BLK)),[.12,-1.47,1.18],{dir:[0,0,.95]},
+    "Port power microUSB","Masuk listrik 5 V dari adaptor");
+
+  // komponen di atas PCB
+  add(E(box(.14,1.5,.24),CY,.9,BLK),[PX+.1,.12,.42],{dir:[.45,0,0]},"Trafo Ethernet","Mengisolasi dan menyaring sinyal tiap port");
+  add(chip(.55,.55,OR),[PX+.06,.25,-.25],{dir:[.95,0,0]},"CPU / SoC QCA9533","650 MHz · sudah termasuk switch dan radio WiFi 2.4 GHz");
+  add(chip(.3,.5,CY),[PX+.06,.85,-.2],{dir:[.7,0,0]},"RAM 32 MB","Memori kerja saat RouterOS berjalan");
+  add(chip(.22,.3,CY),[PX+.06,-.55,-.45],{dir:[.7,0,0]},"Flash 16 MB","Menyimpan RouterOS dan konfigurasi");
+  // antena WiFi: jalur tembaga zig-zag di tepi atas dan tepi belakang PCB
+  let ant0=null;
+  [0,1].forEach(v=>{ const z=[], P=(a,b)=>v?new V3(.012,a,b):new V3(.012,b,a);
+    for(let i=0;i<8;i++) z.push(P(-.38+i*.095,i%2?-.1:.1),P(-.38+(i+1)*.095,i%2?.1:-.1));
+    const o=add(grp(E(v?box(.02,.9,.3):box(.02,.3,.9),OR,.95,PCBC),lines(z,OR,.9)), v?[PX+.04,-.85,-1.0]:[PX+.04,1.3,-.7],
+      {dir:v?[.5,0,-.75]:[.5,.75,0]}, v?null:"Antena WiFi (2 buah)","Jalur tembaga di PCB · 2.4 GHz, 1.5 dBi");
+    if(v) o.userData.pickAs=ant0; else ant0=o; });      // antena kedua ikut terpilih bersama yang pertama
+  // PCB + jalur tembaga
+  { const tr=[], pads=[];
+    for(let k=0;k<26;k++){ const y=(Math.random()-.5)*2.7, z=(Math.random()-.5)*2, y2=clamp(y+(Math.random()-.5)*1.3,-1.4,1.4),
+        z2=clamp(z+(Math.random()-.5)*.9,-1.05,1.05);
+      tr.push(new V3(.03,y,z),new V3(.03,y2,z),new V3(.03,y2,z),new V3(.03,y2,z2)); pads.push(new V3(.03,y,z),new V3(.03,y2,z2)); }
+    add(grp(E(box(.05,3,2.3),GR,.95,PCBC),lines(tr,GR,.4),dots(new THREE.BufferGeometry().setFromPoints(pads),GR,.05,.8)),
+      [PX,0,-.05],{},"PCB (papan sirkuit)","Tempat semua komponen terpasang",[0,-1.4,-1.0]); }
+  return g;
+}
+const OBJECTS=[{name:"ROUTER",build:buildRouter,still:true,view:[.3,-.65]},{name:"BUMI",build:buildGlobe},{name:"REAKTOR",build:buildReactor},
+               {name:"DNA",build:buildDNA},{name:"KUBUS",build:buildCube}];
+
+/* ---------- panggung ---------- */
+const holo=new THREE.Group(); holo.rotation.order="ZXY"; scene.add(holo);
+const floor=new THREE.Group(); floor.position.y=-2.75; scene.add(floor);
+const f1=ring(2.3,CY,.5), f2=dashRing(2.7,24,CY,.45), f3=dashRing(1.5,6,OR,.5,.8), f4=ring(.6,CY,.35);
+floor.add(f1,f2,f3,f4);
+{ const p=[]; for(let i=0;i<350;i++) p.push(new V3((Math.random()-.5)*16,(Math.random()-.5)*9,(Math.random()-.5)*8-1));
+  var dust=dots(new THREE.BufferGeometry().setFromPoints(p),CY,.03,.45); scene.add(dust); }
+
+/* ================= state ================= */
+const VIEW_X=.3; let IDLE=.004;
+const labBox=$("labels"), lctx=$("lbl").getContext("2d"); let labEls=[];
+let cur=null, curIdx=-1, appear=1;
+let rotX=VIEW_X, rotY=0, rotZ=0, tRotX=VIEW_X, tRotY=0, tRotZ=0, velX=0, velY=IDLE;
+let zoom=1, tZoom=1, explode=0, tExplode=0, spread=0, tSpread=0;   // spread = komponen dijajarkan satu per satu
+let grabbing=false, modeTxt="-", handCount=0;
+let sel=null, pickMeshes=[], curMats=null;      // komponen terpilih, mesh yang bisa dibidik, material per komponen
+const ray=new THREE.Raycaster(), ndc=new THREE.Vector2();
+
+/* pilih satu komponen (null = lepas pilihan) */
+function select(part){
+  sel=part||null; document.body.classList.toggle("sel-on",!!sel);
+  if(!sel) return;
+  const i=labEls.findIndex(o=>o.c===sel), L=sel.userData.label;
+  $("iIdx").textContent="KOMPONEN "+(i+1)+" / "+labEls.length;
+  $("iT").textContent=L.t; $("iD").textContent=L.d; $("iM").textContent=L.more;
+}
+function stepSel(d){
+  const n=labEls.length; if(!n) return;
+  const i=labEls.findIndex(o=>o.c===sel);
+  select(labEls[i<0 ? (d>0?0:n-1) : (i+d+n)%n].c);
+}
+/* komponen di titik layar (x,y); kalau meleset, ambil yang titik labelnya paling dekat dalam radius tol */
+function pickAt(x,y,tol=0){
+  if(!labEls.length) return null;
+  ndc.set(x/W*2-1,1-y/H*2); ray.setFromCamera(ndc,camera);
+  const hit=ray.intersectObjects(pickMeshes,false)[0];
+  if(hit) return hit.object.userData.part;
+  let best=null, bd=tol;
+  for(const o of labEls){ const d=Math.hypot(o.sx-x,o.sy-y); if(d<bd){ bd=d; best=o.c; } }
+  return best;
+}
+
+function setObj(i){
+  i=(i+OBJECTS.length)%OBJECTS.length; if(i===curIdx) return;
+  if(cur) holo.remove(cur);
+  const o=OBJECTS[i]; if(!o.group) o.group=o.build();
+  cur=o.group; holo.add(cur); curIdx=i; appear=0; tExplode=0;
+  $("objName").textContent=o.name;
+  [...$("tabs").children].forEach((b,k)=>b.classList.toggle("active",k===i));
+  IDLE=o.still?0:.004;                       // objek berlabel tidak berputar sendiri
+  labBox.innerHTML=""; labEls=[];
+  for(const c of cur.children){ const L=c.userData.label; if(!L) continue;
+    const el=document.createElement("div"); el.className="lab";
+    const b=document.createElement("b"); b.textContent=L.t; const s=document.createElement("span"); s.textContent=L.d;
+    el.append(b,s); labBox.appendChild(el); labEls.push({el,c,L,p:new V3(),side:-1,sx:-1e9,sy:-1e9}); }
+  select(null); pickMeshes=[]; curMats=null;
+  if(labEls.length){ curMats=[];
+    for(const c of cur.children){ const u=c.userData, tgt=u.label?c:u.pickAs, list=[];
+      c.traverse(n=>{ const m=n.material; if(!m) return;
+        if(m.userData.op===undefined) m.userData.op=m.opacity;
+        list.push(m);
+        if(n.isMesh && tgt && !m.isMeshBasicMaterial){ n.userData.part=tgt; pickMeshes.push(n); } });
+      if(u.f===undefined) u.f=1;
+      curMats.push({part:c,list}); } }
+  resetView();
+}
+function resetView(){ const v=OBJECTS[curIdx].view||[VIEW_X,0];
+  tRotX=v[0]; tRotY=v[1]; tRotZ=0; tZoom=1; tExplode=0; velX=0; velY=IDLE; tSpread=0; $("bRow").textContent="JAJAR"; }
+
+/* JAJAR: tiap komponen diberi tempat sendiri, bersebelahan dalam baris-baris yang menghadap kamera.
+   Ukuran tiap komponen diukur dari sudut pandang bawaan objek, lalu dicari jumlah baris yang paling pas di layar. */
+function layoutSpread(){
+  const v=OBJECTS[curIdx].view||[VIEW_X,0], parts=cur.children.filter(c=>c.userData.home), n=parts.length;
+  if(!n) return 1;
+  const keep=[holo.rotation.clone(),holo.scale.clone(),holo.position.clone()], box=new THREE.Box3(), sz=new V3();
+  holo.rotation.set(v[0],v[1],0); holo.scale.setScalar(1); holo.position.set(0,0,0);
+  const items=parts.map(c=>{ const p=c.position.clone(), s=c.scale.clone();
+    c.position.copy(c.userData.home); c.scale.setScalar(1); holo.updateMatrixWorld(true);
+    box.setFromObject(c); box.getSize(sz); const ctr=box.getCenter(new V3());
+    c.position.copy(p); c.scale.copy(s);
+    return {c,w:Math.max(sz.x,.15),h:Math.max(sz.y,.15),ctr}; });
+  const inv=new THREE.Matrix4().makeRotationFromEuler(holo.rotation).invert();
+  holo.rotation.copy(keep[0]); holo.scale.copy(keep[1]); holo.position.copy(keep[2]); holo.updateMatrixWorld(true);
+
+  const visH=2*camera.position.z*Math.tan(camera.fov*Math.PI/360), visW=visH*camera.aspect;
+  const availW=visW*(labEls.length?.5:.62), availH=visH*.6, G=.35;
+  let best=null;
+  for(let r=1;r<=Math.min(4,n);r++){
+    const per=Math.ceil(n/r), rows=[];
+    for(let i=0;i<n;i+=per){ const it=items.slice(i,i+per);
+      rows.push({it,w:it.reduce((a,q)=>a+q.w,0)+G*(it.length-1),h:Math.max(...it.map(q=>q.h))}); }
+    const Wt=Math.max(...rows.map(q=>q.w)), Ht=rows.reduce((a,q)=>a+q.h,0)+G*(rows.length-1);
+    const fit=Math.min(availW/Wt,availH/Ht);
+    if(!best||fit>best.fit) best={rows,Ht,fit};
+  }
+  let y=best.Ht/2, k=0;
+  for(const row of best.rows){ let x=-row.w/2;
+    for(const q of row.it){
+      const d=new V3(x+q.w/2,y-row.h/2,0).sub(q.ctr).applyMatrix4(inv);     // geser di ruang pandang → ruang objek
+      q.c.userData.slot=q.c.userData.home.clone().add(d); q.c.userData.si=n>1?k/(n-1):0; k++;
+      x+=q.w+G; }
+    y-=row.h+G; }
+  return clamp(best.fit,.35,1.3);
+}
+function setSpread(on){
+  if(on===!!tSpread) return;
+  if(on){ const v=OBJECTS[curIdx].view||[VIEW_X,0];
+    tZoom=layoutSpread(); tSpread=1; tExplode=0; velX=0; velY=0;
+    tRotX=v[0]; tRotZ=0; tRotY=v[1]+Math.round((tRotY-v[1])/TAU)*TAU;        // hadapkan ke kamera lewat putaran terdekat
+  }else{ tSpread=0; tZoom=1; }
+  $("bRow").textContent=on?"GABUNG":"JAJAR";
+}
+
+/* label komponen: disusun di kolom kiri/kanan, dihubungkan garis ke komponennya */
+function updateLabels(){
+  lctx.clearRect(0,0,W,H);
+  if(!labEls.length){ document.body.classList.remove("lab-on"); return; }
+  for(const o of labEls){
+    o.p.copy(o.L.a); o.c.localToWorld(o.p); o.p.project(camera);
+    o.sx=(o.p.x+1)/2*W; o.sy=(1-o.p.y)/2*H;
+  }
+  const a=(appear<1||sel)?0:clamp((Math.max(explode,spread)-.3)/.3,0,1);     // saat ada komponen terpilih, daftar label disembunyikan
+  labBox.style.opacity=a; document.body.classList.toggle("lab-on",a>0);
+  if(sel){                                                   // garis dari komponen terpilih ke panel penjelasan
+    const o=labEls.find(q=>q.c===sel), r=$("info").getBoundingClientRect();
+    const tx=clamp(o.sx,r.left,r.right), ty=clamp(o.sy,r.top,r.bottom), pulse=(performance.now()/900)%1;
+    lctx.lineWidth=1.5; lctx.strokeStyle="rgba(255,165,58,.9)"; lctx.fillStyle="rgba(255,165,58,1)";
+    if(tx!==o.sx||ty!==o.sy){ lctx.beginPath(); lctx.moveTo(o.sx,o.sy); lctx.lineTo(tx,ty); lctx.stroke(); }
+    lctx.beginPath(); lctx.arc(o.sx,o.sy,4,0,TAU); lctx.fill();
+    lctx.strokeStyle=`rgba(255,165,58,${.9*(1-pulse)})`;
+    lctx.beginPath(); lctx.arc(o.sx,o.sy,6+pulse*20,0,TAU); lctx.stroke();
+  }
+  if(a<=0) return;
+  const LW=W<720?128:(W<1100?200:290), sides=[[],[]];
+  // bagi rata: separuh paling kiri ke kolom kiri, sisanya ke kolom kanan
+  const order=[...labEls].sort((p,q)=>p.sx-q.sx), half=Math.ceil(order.length/2);
+  order.forEach((o,i)=>sides[i<half?0:1].push(o));
+  lctx.lineWidth=1; lctx.strokeStyle=`rgba(53,214,255,${.65*a})`; lctx.fillStyle=`rgba(255,165,58,${a})`;
+  sides.forEach((list,s)=>{
+    list.sort((p,q)=>p.sy-q.sy);
+    const n=list.length, top=120, bot=H-(s?170:105), gap=Math.min(58,(bot-top)/Math.max(1,n-1));
+    let prev=-1e9;
+    for(const o of list){ o.ly=Math.max(o.sy,prev+gap,top); prev=o.ly; }
+    for(let i=n-1;i>=0;i--) list[i].ly=Math.min(list[i].ly,bot-(n-1-i)*gap);
+    const x=s?W-20-LW:20, edge=s?x-4:x+LW+4, elbow=s?edge-26:edge+26;
+    for(const o of list){
+      o.el.style.width=LW+"px"; o.el.classList.toggle("r",!!s);
+      o.el.style.transform=`translate(${x}px,${Math.round(o.ly-20)}px)`;
+      lctx.beginPath(); lctx.moveTo(o.sx,o.sy); lctx.lineTo(elbow,o.ly); lctx.lineTo(edge,o.ly); lctx.stroke();
+      lctx.beginPath(); lctx.arc(o.sx,o.sy,3,0,TAU); lctx.fill();
+    }
+  });
+}
+
+OBJECTS.forEach((o,i)=>{ const b=document.createElement("button"); b.textContent=o.name;
+  b.onclick=()=>setObj(i); $("tabs").appendChild(b); });
+setObj(0); appear=1;
+
+/* ================= loop gambar ================= */
+let last=performance.now(), frames=0, fpsT=last, tick=0;
+function animate(now){
+  requestAnimationFrame(animate);
+  const dt=Math.min(.05,(now-last)/1000); last=now; tick++;
+
+  if(!grabbing){ tRotY+=velY; tRotX+=velX; velY+=((tSpread?0:IDLE)-velY)*.04; velX*=.9; }   // saat dijajarkan tidak berputar sendiri
+  tRotX=clamp(tRotX,-1.45,1.45);
+  rotX+=(tRotX-rotX)*.22; rotY+=(tRotY-rotY)*.22; rotZ+=(tRotZ-rotZ)*.22;
+  zoom+=(tZoom-zoom)*.18; explode+=(tExplode-explode)*.12; spread+=(tSpread-spread)*.09;
+  appear=Math.min(1,appear+dt*2.2);
+  const ease=1-Math.pow(1-appear,3);
+
+  holo.rotation.set(rotX,rotY,rotZ);
+  holo.scale.setScalar(Math.max(.001,zoom*ease));
+  holo.position.x = appear<.55 ? (Math.random()-.5)*.12 : 0;    // glitch singkat saat muncul
+
+  for(const c of cur.children){ const u=c.userData; if(!u.home) continue;
+    c.position.copy(u.home).addScaledVector(u.dir,explode);
+    if(u.slot && spread>.001){                        // jajar: komponen berangkat bergiliran ke tempatnya masing-masing
+      const e=clamp(spread*1.6-.6*u.si,0,1); c.position.lerp(u.slot,e*e*(3-2*e)); }
+    if(u.grow) c.scale.setScalar(1+u.grow*explode*(1-spread));
+    c.rotation.x+=u.spin[0]*dt; c.rotation.y+=u.spin[1]*dt; c.rotation.z+=u.spin[2]*dt;
+  }
+  // sorot komponen terpilih: yang lain diredupkan (tembus pandang), yang dipilih menyala
+  if(curMats) for(const pm of curMats){ const u=pm.part.userData, on=!!sel&&(pm.part===sel||u.pickAs===sel);
+    const tg=sel?(on?1.5:.12):1; u.f=Math.abs(tg-u.f)<.004?tg:u.f+(tg-u.f)*.18;
+    for(const m of pm.list){
+      if(m.isMeshStandardMaterial){
+        const o=Math.min(1,u.f), tr=o<.99;
+        m.opacity=o; if(m.transparent!==tr){ m.transparent=tr; m.depthWrite=!tr; m.needsUpdate=true; }
+        m.emissiveIntensity=on?.2+.12*Math.sin(now*.005):0;
+      }else m.opacity=Math.min(1,m.userData.op*u.f);
+    } }
+  f1.rotation.y+=dt*.1; f2.rotation.y-=dt*.25; f3.rotation.y+=dt*.6; dust.rotation.y+=dt*.01;
+  f4.scale.setScalar(1+((now/1000)%2)*1.6); f4.material.opacity=.4*(1-((now/1000)%2)/2);
+
+  renderer.render(scene,camera);
+  updateLabels();
+
+  frames++;
+  if(now-fpsT>500){ $("rFps").textContent=Math.round(frames*1000/(now-fpsT)); frames=0; fpsT=now; }
+  if(tick%5===0){
+    const deg=v=>Math.round(((v*180/Math.PI)%360+360)%360);
+    $("rRot").textContent=deg(rotX)+"° "+deg(rotY)+"°";
+    $("rZoom").textContent=Math.round(zoom*100)+"%";
+    $("rExp").textContent=Math.round(explode*100)+"%";
+    $("rHands").textContent=handCount; $("rMode").textContent=modeTxt;
+  }
+}
+requestAnimationFrame(animate);
+setTimeout(()=>{ loadLandmarker().catch(()=>{}); },300);
+
+/* ================= kamera + pelacakan tangan ================= */
+let landmarker=null, running=false, lastT=-1;
+const CONN=[[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],
+  [9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+const TIPS=[4,8,12,16,20];
+
+/* kamera: ingat pilihan terakhir (mis. HP yang dijadikan webcam) */
+const savedCam=()=>{ try{ return localStorage.getItem("holoCam")||""; }catch(e){ return ""; } };
+async function openCam(id){
+  const base={width:{ideal:1280},height:{ideal:720},frameRate:{ideal:30}};   // resolusi tinggi: tangan yang jauh tetap tajam
+  if(id){ try{ return await navigator.mediaDevices.getUserMedia({audio:false,video:{...base,deviceId:{exact:id}}}); }catch(e){} }
+  return navigator.mediaDevices.getUserMedia({audio:false,video:{...base,facingMode:"user"}});
+}
+let swapping=false;
+async function nextCam(){
+  if(!running){ $("boot").classList.remove("hide"); return; }      // kamera belum nyala: tampilkan layar awal
+  if(swapping) return; swapping=true;
+  try{
+    const list=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==="videoinput");
+    if(list.length<2){ $("stat").textContent="HANYA ADA 1 KAMERA"; return; }
+    const curId=cam.srcObject?.getVideoTracks()[0]?.getSettings().deviceId;
+    const nx=list[(list.findIndex(d=>d.deviceId===curId)+1)%list.length];
+    cam.srcObject?.getTracks().forEach(t=>t.stop());
+    const st=await openCam(nx.deviceId); cam.srcObject=st; await cam.play();
+    const tr=st.getVideoTracks()[0];
+    try{ localStorage.setItem("holoCam",tr.getSettings().deviceId||""); }catch(e){}
+    $("stat").textContent=(tr.label||"KAMERA").toUpperCase().slice(0,26);
+  }catch(e){ $("stat").textContent="GAGAL GANTI KAMERA"; }
+  finally{ swapping=false; }
+}
+
+async function start(){
+  let stream=null;
+  try{
+    $("startBtn").disabled=true; $("msg").textContent="Meminta izin kamera…";
+    const modelP=loadLandmarker(); modelP.catch(()=>{});
+    if(!navigator.mediaDevices?.getUserMedia) throw new Error("Browser ini tidak mendukung kamera (butuh HTTPS atau localhost).");
+    stream=await openCam(savedCam());
+    cam.srcObject=stream; await cam.play(); cam.classList.add("on");
+    $("msg").textContent="Memuat model AI pelacak tangan…";
+    landmarker=await modelP;
+    running=true; $("led").classList.add("on"); $("stat").textContent="PELACAKAN AKTIF";
+    $("boot").classList.add("hide");
+    trackLoop();
+  }catch(e){
+    if(stream){ stream.getTracks().forEach(t=>t.stop()); cam.srcObject=null; cam.classList.remove("on"); }
+    let m=e?.message||String(e);
+    if(/Permission|NotAllowed/i.test(m)) m="Akses kamera ditolak. Izinkan lewat ikon gembok di address bar, lalu muat ulang.";
+    else if(/NotFound/i.test(m)) m="Kamera tidak ditemukan.";
+    else if(/NotReadable|in use/i.test(m)) m="Kamera sedang dipakai aplikasi lain. Tutup dulu lalu coba lagi.";
+    else if(/fetch|network|Failed|import/i.test(m)) m="Gagal memuat model AI. Periksa koneksi internet lalu coba lagi.";
+    $("msg").textContent="⚠ "+m; $("startBtn").disabled=false;
+  }
+}
+
+/* titik landmark → piksel layar (video dicerminkan & object-fit: cover) */
+function toScreen(p){
+  const vw=cam.videoWidth, vh=cam.videoHeight, s=Math.max(W/vw,H/vh);
+  return {x: W-(p.x*vw*s+(W-vw*s)/2), y: p.y*vh*s+(H-vh*s)/2};
+}
+const d2=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+const d3=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y,(a.z||0)-(b.z||0));
+
+/* filter One Euro: halus saat tangan diam, tetap sigap saat bergerak cepat (satuan: tinggi layar) */
+class Euro{
+  constructor(minCut=1.4,beta=9){ this.mc=minCut; this.b=beta; this.v=null; this.dv=0; }
+  f(x,dt){
+    x/=H; if(this.v===null){ this.v=x; return x*H; }
+    const al=c=>{ const r=TAU*c*dt; return r/(r+1); };
+    this.dv+=((x-this.v)/dt-this.dv)*al(1);
+    this.v+=(x-this.v)*al(this.mc+this.b*Math.abs(this.dv));
+    return this.v*H;
+  }
+}
+
+/* pelacak: tiap tangan dikenali dari posisinya (bukan label kiri/kanan yang sering tertukar),
+   dan statusnya dipertahankan beberapa frame kalau deteksi sempat hilang */
+let tracks=[], trackId=1;
+const newTrack=()=>({id:trackId++,cx:0,cy:0,miss:0,age:0,pinch:false,pn:0,gap:1,gi:0,ext:[false,false,false,false],
+  pose:"none",raw:"none",rn:0,fx:new Euro(),fy:new Euro(),ax:new Euro(),ay:new Euro(),
+  tx:new Euro(1.0,7),ty:new Euro(1.0,7)});
+function matchHands(res){
+  const dets=[];
+  (res.landmarks||[]).forEach((lm,i)=>{
+    const asp=cam.videoHeight/cam.videoWidth;
+    const sz=Math.max(Math.hypot(lm[0].x-lm[9].x,(lm[0].y-lm[9].y)*asp),
+                      Math.hypot(lm[5].x-lm[17].x,(lm[5].y-lm[17].y)*asp)*1.3)||.01;   // ukuran tangan (satuan lebar frame)
+    const d={lm,wl:res.worldLandmarks?.[i]||lm,cx:lm[9].x,cy:lm[9].y,sz,t:null};
+    const near=clamp(sz*.7,.015,.06);                                         // tangan jauh = kecil, ambang ikut mengecil
+    if(!dets.some(o=>Math.hypot(o.cx-d.cx,o.cy-d.cy)<near)) dets.push(d);     // buang deteksi ganda
+  });
+  const pairs=[];
+  for(const d of dets) for(const t of tracks) pairs.push({d,t,q:Math.hypot(d.cx-t.cx,d.cy-t.cy)});
+  pairs.sort((a,b)=>a.q-b.q);
+  const taken=new Set();
+  for(const {d,t,q} of pairs){ if(q>.3||d.t||taken.has(t)) continue; d.t=t; taken.add(t); }
+  for(const d of dets){
+    if(!d.t){ d.t=newTrack(); tracks.push(d.t); taken.add(d.t); }
+    d.t.cx=d.cx; d.t.cy=d.cy; d.t.miss=0; d.t.age++;
+  }
+  for(const t of tracks) if(!taken.has(t)) t.miss++;
+  tracks=tracks.filter(t=>t.miss<=6);
+  return dets;
+}
+
+const grab={mode:null};     // status cubitan antar-frame
+const aim={part:undefined,t:0,armed:true};   // status menunjuk komponen
+let peaceT=0, peaceArmed=true, backT=0, backArmed=true, backHand=null, rowT=0, rowArmed=true, rowHand=null;
+const FINGERS=[[5,6,8],[9,10,12],[13,14,16],[17,18,20]];
+
+function readHand(d,dt){
+  const {lm,wl,t:st}=d, p=lm.map(toScreen);
+  // ukuran tangan yang tetap stabil walau telapak miring
+  const size=Math.max(d2(p[0],p[9]),d2(p[5],p[17])*1.3)||1;
+  const palm3=d3(wl[0],wl[9])||1;
+  // jarak ibu jari–telunjuk: gabungan ukuran 3D (tahan miring) dan 2D (tahan galat kedalaman)
+  const gRaw=(d3(wl[4],wl[8])/palm3+d2(p[4],p[8])/size)/2;
+  // dihaluskan (~5 Hz) supaya getaran landmark tidak dikira jari membuka/menutup
+  const gap=st.gi ? st.gap+(gRaw-st.gap)*(1-Math.exp(-dt*TAU*5)) : gRaw; st.gi=1;
+  const gapMove=Math.abs(gap-st.gap)/dt>1.2; st.gap=gap;     // jari sedang membuka/menutup (laju per detik)
+  // jari lurus atau menekuk, dari sudut ruas jari 3D (tidak tergantung arah tangan)
+  const dir=(a,b)=>{ const x=wl[b].x-wl[a].x, y=wl[b].y-wl[a].y, z=(wl[b].z||0)-(wl[a].z||0), n=Math.hypot(x,y,z)||1;
+    return [x/n,y/n,z/n]; };
+  let idxS=1;
+  FINGERS.forEach(([m,q,tip],i)=>{
+    const u=dir(m,q), v=dir(q,tip), s=u[0]*v[0]+u[1]*v[1]+u[2]*v[2];
+    if(!i) idxS=s;
+    if(st.ext[i]){ if(s<.35) st.ext[i]=false; } else if(s>.65) st.ext[i]=true;
+  });
+  // cubit: butuh 2 frame berturut-turut, dan tangan mengepal (telunjuk terlipat penuh) tidak dihitung cubit
+  const want=st.pinch?gap<.45:(gap<.28 && idxS>-.35);
+  if(want!==st.pinch){ if(++st.pn>=2){ st.pinch=want; st.pn=0; } } else st.pn=0;
+  const e=st.ext, far=gap>.5;
+  const raw = st.pinch ? "pinch" : !far ? "none"
+    : e[0]&&e[1]&&e[2]&&e[3] ? "open"
+    : e[0]&&e[1]&&e[2]&&!e[3] ? "three"
+    : e[0]&&e[1]&&!e[2]&&!e[3] ? "peace"
+    : e[0]&&!e[1]&&!e[2]&&!e[3] ? "point" : "none";
+  if(raw===st.raw) st.rn++; else { st.raw=raw; st.rn=1; }
+  if(st.rn>=3 || raw==="pinch") st.pose=raw;                 // pose harus bertahan 3 frame
+
+  const mx=(p[4].x+p[8].x)/2, my=(p[4].y+p[8].y)/2;
+  const palm={x:(p[0].x+p[5].x+p[9].x+p[13].x+p[17].x)/5, y:(p[0].y+p[5].y+p[9].y+p[13].y+p[17].y)/5};
+  return {id:st.id,p,size,gap,gapMove,pinch:st.pinch,pose:st.pose,palm,
+    x:st.fx.f(mx,dt), y:st.fy.f(my,dt),                                   // titik cubit (tampilan)
+    ax:st.ax.f((mx+palm.x)/2,dt), ay:st.ay.f((my+palm.y)/2,dt),           // jangkar gerak: tidak melompat saat jari membuka
+    tx:st.tx.f(p[8].x,dt), ty:st.ty.f(p[8].y,dt)};                        // ujung telunjuk
+}
+
+/* zoom digital: model hanya "melihat" potongan frame di sekitar tangan, jadi tangan yang jauh
+   tampak besar bagi AI. Potongan bergeser halus mengikuti tangan; kalau tangan hilang,
+   frame disisir petak demi petak sampai ketemu lagi. Satuan roi: bagian dari frame (0..1). */
+const crop=document.createElement("canvas"), cctx=crop.getContext("2d",{alpha:false});
+const FULL={x:0,y:0,s:1};
+const SCAN=[]; for(const [s,o] of [[.5,[.25,0,.5]],[.36,[.32,.11,.53,0,.64]]])
+  for(const y of o) for(const x of o) SCAN.push({x,y,s});
+let roi={...FULL}, goal={...FULL}, lostN=0;
+
+function detect(){
+  const vw=cam.videoWidth, vh=cam.videoHeight, cw=Math.min(vw,640), ch=Math.round(cw*vh/vw);
+  if(crop.width!==cw||crop.height!==ch){ crop.width=cw; crop.height=ch; }
+  const sw=clamp(Math.round(roi.s*vw),2,vw), sh=clamp(Math.round(roi.s*vh),2,vh);
+  const sx=clamp(Math.round(roi.x*vw),0,vw-sw), sy=clamp(Math.round(roi.y*vh),0,vh-sh);
+  cctx.drawImage(cam,sx,sy,sw,sh,0,0,cw,ch);
+  const res=landmarker.detectForVideo(crop,performance.now());
+  const kx=sw/vw, ky=sh/vh, ox=sx/vw, oy=sy/vh;               // kembalikan ke koordinat frame penuh
+  return {worldLandmarks:res.worldLandmarks,
+    landmarks:(res.landmarks||[]).map(h=>h.map(p=>({x:ox+p.x*kx,y:oy+p.y*ky,z:(p.z||0)*kx})))};
+}
+
+function aimRoi(dets){
+  if(!dets.length){
+    if(++lostN>8){                                            // sisir: frame penuh, petak, petak, frame penuh, …
+      const i=lostN-9; roi={...(i%3 ? SCAN[(i-(i/3|0)-1)%SCAN.length] : FULL)}; goal={...roi};
+    }
+    return;
+  }
+  lostN=0;
+  const vw=cam.videoWidth, vh=cam.videoHeight;
+  let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9,sz=0;
+  for(const d of dets){ sz=Math.max(sz,d.sz*vw);
+    for(const p of d.lm){ x0=Math.min(x0,p.x*vw); x1=Math.max(x1,p.x*vw); y0=Math.min(y0,p.y*vh); y1=Math.max(y1,p.y*vh); } }
+  x0-=4.5*sz; x1+=4.5*sz; y0-=2*sz; y1+=2*sz;                 // ruang gerak + tempat untuk tangan kedua
+  let s=Math.max((x1-x0)/vw,(y1-y0)/vh);
+  s = s>(goal.s===1?.7:.85) ? 1 : Math.max(s,.34);
+  const ideal={x:clamp((x0+x1)/2/vw-s/2,0,1-s), y:clamp((y0+y1)/2/vh-s/2,0,1-s), s};
+  const off=Math.hypot(ideal.x+ideal.s/2-goal.x-goal.s/2, ideal.y+ideal.s/2-goal.y-goal.s/2);
+  if(Math.abs(ideal.s/goal.s-1)>.15 || off>.12*goal.s) goal=ideal;   // tangan diam = potongan diam
+  roi.s+=(goal.s-roi.s)*.25; roi.x+=(goal.x-roi.x)*.25; roi.y+=(goal.y-roi.y)*.25;
+}
+
+function trackLoop(){
+  if(!running) return;
+  requestAnimationFrame(trackLoop);
+  if(cam.currentTime===lastT || !cam.videoWidth) return;
+  const dt=clamp(lastT<0?1/30:cam.currentTime-lastT,1/120,.1);
+  lastT=cam.currentTime;
+  let res; try{ res=detect(); }catch(e){ return; }
+  const dets=matchHands(res); aimRoi(dets);
+  const hands=dets.filter(d=>d.t.age>=2).map(d=>readHand(d,dt));   // deteksi 1 frame saja = kemungkinan salah baca
+  handCount=hands.length;
+  // tangan sempat hilang ≤3 frame: tahan gerakan yang sedang berjalan, jangan diputus
+  if(tracks.some(t=>t.age>=2 && t.miss>0 && t.miss<=3)){ drawFx(hands,null,null,null,null); return; }
+
+  const P=hands.filter(h=>h.pinch), O=hands.filter(h=>h.pose==="open");
+  grabbing=P.length>0||!!drag; modeTxt = hands.length? "SIAP" : "-";
+  let zoomLine=null, expLine=null;
+
+  if(P.length===2){                                   // dua cubitan: zoom + miring
+    const dx=P[1].ax-P[0].ax, dy=P[1].ay-P[0].ay, d=Math.hypot(dx,dy)/H, a=Math.atan2(dy,dx);
+    const key=Math.min(P[0].id,P[1].id)+"-"+Math.max(P[0].id,P[1].id);
+    if(grab.mode==="two" && grab.key===key && grab.d>.02 && !P[0].gapMove && !P[1].gapMove){
+      tZoom=clamp(tZoom*(d/grab.d),.35,3);
+      let da=a-grab.a; while(da>Math.PI/2) da-=Math.PI; while(da<-Math.PI/2) da+=Math.PI;
+      tRotZ-=da;
+    }
+    grab.mode="two"; grab.key=key; grab.d=d; grab.a=a; velX=0; velY=0; modeTxt="ZOOM"; zoomLine=[P[0],P[1]];
+  }else if(P.length===1){                             // satu cubitan: putar
+    const h=P[0];
+    if(grab.mode==="one" && grab.key===h.id){
+      const dx=(h.ax-grab.x)/H, dy=(h.ay-grab.y)/H;
+      if(!h.gapMove && Math.hypot(dx,dy)<.25){
+        tRotY+=dx*4.5; tRotX+=dy*4.5;
+        velY+=(dx*2.2-velY)*.5; velX+=(dy*2.2-velX)*.5;   // kecepatan lempar dirata-rata, bukan dari 1 frame
+      }
+    }else{ velX=0; velY=0; }
+    grab.mode="one"; grab.key=h.id; grab.x=h.ax; grab.y=h.ay; modeTxt="PUTAR";
+  }else{
+    grab.mode=null;
+    if(O.length===2){                                 // dua telapak terbuka: urai (diukur dalam satuan lebar tangan)
+      const r=d2(O[0].palm,O[1].palm)/((O[0].size+O[1].size)/2);
+      tExplode=clamp((r-1.8)/3,0,1); modeTxt="URAI"; expLine=[O[0].palm,O[1].palm];
+    }
+  }
+
+  // ✌️ ditahan → objek berikutnya
+  const peace=hands.find(h=>h.pose==="peace");
+  if(peace && !grabbing){
+    if(peaceArmed){ peaceT+=dt; modeTxt="GANTI";
+      if(peaceT>=.45){ setObj(curIdx+1); peaceArmed=false; peaceT=0; } }
+  }else{ peaceT=0; if(!peace) peaceArmed=true; }
+
+  // 🤟 tiga jari ditahan → komponen dijajarkan satu per satu / digabung lagi
+  const three=grabbing?null:hands.find(h=>h.pose==="three");
+  if(three){
+    if(rowArmed){ rowT+=dt; modeTxt="JAJAR";
+      if(rowT>=.5){ setSpread(!tSpread); rowArmed=false; rowT=0; } }
+  }else{ rowT=0; rowArmed=true; }
+  rowHand=three&&rowT>0?three:null;
+
+  // 🖐 satu telapak terbuka ditahan saat ada komponen terpilih → semua komponen kembali seperti semula
+  const back=(sel && O.length===1 && !grabbing && !peace) ? O[0] : null;
+  if(back){
+    if(backArmed){ backT+=dt; modeTxt="KEMBALI";
+      if(backT>=.6){ select(null); backArmed=false; backT=0; } }
+  }else{ backT=0; if(!O.length) backArmed=true; }
+  backHand=back&&backT>0?back:null;
+
+  // ☝️ tunjuk komponen lalu tahan → pilih · tunjuk tempat kosong lalu tahan → lepas pilihan
+  const ptr=(!grabbing && labEls.length) ? hands.find(h=>h.pose==="point") : null;
+  let aimInfo=null;
+  if(ptr){
+    modeTxt="TUNJUK";
+    const hit=pickAt(ptr.tx,ptr.ty,44);
+    if(hit!==aim.part){ aim.part=hit; aim.t=0; aim.armed=true; }
+    const need = hit ? (hit===sel?0:.6) : (sel?1:0);
+    if(need && aim.armed){ aim.t+=dt; if(aim.t>=need){ select(hit); aim.armed=false; aim.t=0; } }
+    aimInfo={h:ptr,hit,prog:need&&aim.armed?aim.t/need:0};
+  }else{ aim.part=undefined; aim.t=0; aim.armed=true; }
+
+  drawFx(hands,zoomLine,expLine,peace,aimInfo);
+}
+
+function drawFx(hands,zoomLine,expLine,peace,aimInfo){
+  const c=fctx; c.clearRect(0,0,W,H);
+  c.lineCap="round"; c.font="12px Consolas,monospace"; c.textAlign="center";
+  if(hands.length && roi.s<.98){                      // bingkai area fokus AI saat zoom digital aktif
+    const a=toScreen({x:roi.x,y:roi.y}), b=toScreen({x:roi.x+roi.s,y:roi.y+roi.s});
+    c.strokeStyle="rgba(53,214,255,.3)"; c.fillStyle="rgba(53,214,255,.55)"; c.lineWidth=1; c.setLineDash([4,10]);
+    c.strokeRect(b.x,a.y,a.x-b.x,b.y-a.y); c.setLineDash([]);
+    c.fillText("FOKUS AI ×"+(1/roi.s).toFixed(1),(a.x+b.x)/2,Math.max(14,a.y-6));
+  }
+  for(const h of hands){
+    c.strokeStyle="rgba(53,214,255,.5)"; c.lineWidth=1.5; c.beginPath();
+    for(const [a,b] of CONN){ c.moveTo(h.p[a].x,h.p[a].y); c.lineTo(h.p[b].x,h.p[b].y); }
+    c.stroke();
+    c.fillStyle="rgba(200,244,255,.9)";
+    for(const i of TIPS){ c.beginPath(); c.arc(h.p[i].x,h.p[i].y,3.5,0,TAU); c.fill(); }
+    // bidikan cubit
+    if(h.pinch){
+      c.fillStyle="rgba(255,165,58,.9)"; c.shadowColor="#ffa53a"; c.shadowBlur=18;
+      c.beginPath(); c.arc(h.x,h.y,8,0,TAU); c.fill(); c.shadowBlur=0;
+      c.strokeStyle="rgba(255,165,58,.9)"; c.lineWidth=2; c.beginPath(); c.arc(h.x,h.y,20,0,TAU); c.stroke();
+    }else if(!aimInfo || aimInfo.h!==h){
+      c.strokeStyle="rgba(53,214,255,.8)"; c.lineWidth=1.5;
+      c.beginPath(); c.arc(h.x,h.y,clamp(h.gap*h.size*.5,10,60),0,TAU); c.stroke();
+    }
+  }
+  const link=(a,b,label,col)=>{
+    c.strokeStyle=col; c.lineWidth=1.5; c.setLineDash([8,8]);
+    c.beginPath(); c.moveTo(a.x,a.y); c.lineTo(b.x,b.y); c.stroke(); c.setLineDash([]);
+    c.fillStyle=col; c.fillText(label,(a.x+b.x)/2,(a.y+b.y)/2-10);
+  };
+  if(zoomLine) link(zoomLine[0],zoomLine[1],"ZOOM "+Math.round(tZoom*100)+"%","rgba(255,165,58,.95)");
+  if(expLine) link(expLine[0],expLine[1],"URAI "+Math.round(tExplode*100)+"%","rgba(53,214,255,.95)");
+  if(peace && peaceArmed && peaceT>0){
+    c.strokeStyle="rgba(255,165,58,.95)"; c.lineWidth=4;
+    c.beginPath(); c.arc(peace.palm.x,peace.palm.y,46,-Math.PI/2,-Math.PI/2+TAU*peaceT/.45); c.stroke();
+    c.fillStyle="rgba(255,165,58,.95)"; c.fillText("GANTI OBJEK",peace.palm.x,peace.palm.y-58);
+  }
+  if(rowHand && hands.includes(rowHand)){             // lingkaran hitung mundur "jajar / gabung"
+    const {x,y}=rowHand.palm;
+    c.strokeStyle="rgba(255,165,58,.95)"; c.lineWidth=4;
+    c.beginPath(); c.arc(x,y,46,-Math.PI/2,-Math.PI/2+TAU*rowT/.5); c.stroke();
+    c.fillStyle="rgba(255,165,58,.95)"; c.fillText(tSpread?"GABUNG LAGI":"JAJARKAN",x,y-58);
+  }
+  if(backHand && hands.includes(backHand)){          // lingkaran hitung mundur "kembali semula"
+    const {x,y}=backHand.palm;
+    c.strokeStyle="rgba(53,214,255,.95)"; c.lineWidth=4;
+    c.beginPath(); c.arc(x,y,46,-Math.PI/2,-Math.PI/2+TAU*backT/.6); c.stroke();
+    c.fillStyle="rgba(53,214,255,.95)"; c.fillText("KEMBALI SEMULA",x,y-58);
+  }
+  if(aimInfo){                                        // bidikan telunjuk
+    const {h,hit,prog}=aimInfo, x=h.tx, y=h.ty, col=hit?"rgba(255,165,58,.95)":"rgba(53,214,255,.9)";
+    c.strokeStyle=col; c.lineWidth=1.5; c.beginPath(); c.arc(x,y,13,0,TAU);
+    c.moveTo(x-25,y); c.lineTo(x-8,y); c.moveTo(x+8,y); c.lineTo(x+25,y);
+    c.moveTo(x,y-25); c.lineTo(x,y-8); c.moveTo(x,y+8); c.lineTo(x,y+25); c.stroke();
+    if(prog>0){ c.lineWidth=4; c.beginPath(); c.arc(x,y,31,-Math.PI/2,-Math.PI/2+TAU*prog); c.stroke(); }
+    const txt=hit?hit.userData.label.t:(sel?"LEPAS PILIHAN":"");
+    if(txt){ c.fillStyle=col; c.fillText(txt,x,y-42); }
+  }
+}
+
+/* ================= mouse / keyboard / tombol ================= */
+const sc=$("scene"); let drag=null;
+const tip=$("tip");
+sc.addEventListener("pointerdown",e=>{ if(e.button!==0) return;
+  drag={x:e.clientX,y:e.clientY,x0:e.clientX,y0:e.clientY,t:performance.now()};
+  sc.setPointerCapture(e.pointerId); grabbing=true; tip.style.opacity=0; sc.style.cursor=""; });
+sc.addEventListener("pointerleave",()=>{ tip.style.opacity=0; });
+sc.addEventListener("pointermove",e=>{
+  if(!drag){                                        // arahkan mouse: tampilkan nama komponen di bawah kursor
+    if(e.pointerType!=="mouse") return;
+    const hit=pickAt(e.clientX,e.clientY,14);
+    sc.style.cursor=hit?"pointer":"";
+    if(hit){ tip.textContent=hit.userData.label.t;
+      tip.style.transform=`translate(${Math.min(e.clientX+16,W-tip.offsetWidth-8)}px,${e.clientY+18}px)`; }
+    tip.style.opacity=hit?1:0;
+    return;
+  }
+  const dx=(e.clientX-drag.x)/H, dy=(e.clientY-drag.y)/H; drag.x=e.clientX; drag.y=e.clientY;
+  tRotY+=dx*4.5; tRotX+=dy*4.5; velY=dx*2.2; velX=dy*2.2; grabbing=true; });
+const endDrag=e=>{ if(!drag) return;
+  const click=e.type==="pointerup" && Math.hypot(e.clientX-drag.x0,e.clientY-drag.y0)<6 && performance.now()-drag.t<500;
+  drag=null; grabbing=false;
+  if(click && labEls.length){                       // klik tanpa menyeret = pilih komponen (klik lagi / klik kosong = lepas)
+    const hit=pickAt(e.clientX,e.clientY,e.pointerType==="mouse"?14:30);
+    select(hit===sel?null:hit);
+  } };
+sc.addEventListener("pointerup",endDrag); sc.addEventListener("pointercancel",endDrag);
+sc.addEventListener("wheel",e=>{ e.preventDefault(); tZoom=clamp(tZoom*(e.deltaY<0?1.1:.9),.35,3); },{passive:false});
+sc.addEventListener("contextmenu",e=>{ e.preventDefault(); tExplode=tExplode>.5?0:1; });   // klik kanan = urai
+sc.addEventListener("mousedown",e=>{ if(e.button===1) e.preventDefault(); });               // cegah auto-scroll
+sc.addEventListener("auxclick",e=>{ if(e.button===1){ e.preventDefault(); setObj(curIdx+1); } });  // klik tengah = ganti
+addEventListener("keydown",e=>{
+  if(e.key==="m"||e.key==="M") setSolid(!solidMode);
+  if(e.key==="ArrowRight") setObj(curIdx+1);
+  else if(e.key==="ArrowLeft") setObj(curIdx-1);
+  else if(e.key===" "){ e.preventDefault(); tExplode=tExplode>.5?0:1; }
+  else if(e.key==="r"||e.key==="R") resetView();
+  else if(e.key==="j"||e.key==="J") setSpread(!tSpread);
+  else if(e.key==="ArrowDown"){ e.preventDefault(); stepSel(1); }
+  else if(e.key==="ArrowUp"){ e.preventDefault(); stepSel(-1); }
+  else if(e.key==="Escape") select(null);
+});
+$("iPrev").onclick=()=>stepSel(-1);
+$("iNext").onclick=()=>stepSel(1);
+$("iClose").onclick=()=>select(null);
+$("bExp").onclick=()=>{ tExplode=tExplode>.5?0:1; };
+$("bReset").onclick=resetView;
+$("bRow").onclick=()=>setSpread(!tSpread);
+$("bCam").onclick=()=>document.body.classList.toggle("nocam");
+$("bSwap").onclick=nextCam;
+$("bSolid").onclick=()=>setSolid(!solidMode);
+$("startBtn").onclick=start;
+$("skipBtn").onclick=()=>$("boot").classList.add("hide");
+</script>
+</body>
+</html>
