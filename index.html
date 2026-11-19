@@ -138,12 +138,11 @@
     <i>🤏 Cubit 1 tangan</i> lalu geser = putar<br>
     <i>🤏🤏 Cubit 2 tangan</i> jauhkan / dekatkan = zoom, putar seperti setir = miring<br>
     <i>🖐🖐 Dua telapak terbuka</i> direntangkan = urai komponen<br>
-    <i>✌️ Tahan dua jari</i> = ganti objek<br>
     <i>🤟 Tahan tiga jari</i> (telunjuk, tengah, manis) = jajarkan komponen satu per satu / gabung lagi<br>
     <i>☝️ Tunjuk komponen</i> lalu tahan = pilih · tunjuk tempat kosong = lepas<br>
     <i>🖐 Tahan satu telapak terbuka</i> = komponen kembali seperti semula<br>
-    Mouse: seret = putar · scroll = zoom · klik = pilih komponen · klik kanan = urai · klik tengah = ganti objek<br>
-    Keyboard: ← → objek · ↑ ↓ komponen · Esc · spasi · J = jajar · R = reset · M = tampilan
+    Mouse: seret = putar · scroll = zoom · klik = pilih komponen · klik kanan = urai<br>
+    Keyboard: ↑ ↓ komponen · Esc · spasi · J = jajar · R = reset · M = tampilan
   </div>
 
   <div class="info" id="info">
@@ -179,31 +178,68 @@
 /* ================= pemuat model tangan (sama seperti index.html, tapi 2 tangan) ================= */
 const CDN="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
 const IS_LOCAL=/^(localhost$|127\.|192\.168\.|10\.|\[::1\])/.test(location.hostname);
-const SRC=[
-  {mod:CDN+"/vision_bundle.mjs", wasm:CDN+"/wasm",
-   model:"https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task"},
-  {mod:"./lib/vision_bundle.mjs", wasm:"lib/wasm", model:"models/hand_landmarker.task"}];
-if(IS_LOCAL) SRC.reverse();
+/* Model (±6 MB) dan mesin WASM (±2 MB) diunduh BERSAMAAN sejak halaman dibuka, lengkap dengan persentase.
+   Tiap berkas punya sumber cadangan; unduhan yang macet >12 dtk otomatis pindah ke sumber berikutnya. */
+const MODEL_URLS=["models/hand_landmarker.task",
+  "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task"];
+const MODS=["./lib/vision_bundle.mjs", CDN+"/vision_bundle.mjs"];
+const WASM_DIRS=IS_LOCAL ? ["lib/wasm", CDN+"/wasm"] : [CDN+"/wasm", "lib/wasm"];   // CDN: lebih kecil (brotli) & tersimpan lama di cache
+const SIZE={model:7819105, wasm:9423986};                      // ukuran asli (setelah dekompresi) untuk hitung persen
+const got={model:0, wasm:0};
+let loadPct=0, onLoadPct=null;
+function bump(){ loadPct=Math.min(99,Math.floor((got.model+got.wasm)/(SIZE.model+SIZE.wasm)*100)); onLoadPct?.(loadPct); }
+async function fetchBytes(urls,key){
+  let lastErr;
+  for(const u of urls){
+    const ac=new AbortController(); let timer;
+    const arm=()=>{ clearTimeout(timer); timer=setTimeout(()=>ac.abort(),12000); };
+    try{
+      got[key]=0; bump(); arm();
+      const r=await fetch(u,{signal:ac.signal});
+      if(!r.ok) throw new Error("Failed to fetch "+u+" ("+r.status+")");
+      const rd=r.body.getReader(), chunks=[]; let n=0;
+      for(;;){ const {done,value}=await rd.read(); if(done) break;
+        chunks.push(value); n+=value.length; got[key]=Math.min(n,SIZE[key]); bump(); arm(); }
+      clearTimeout(timer);
+      const out=new Uint8Array(n); let o=0; for(const c of chunks){ out.set(c,o); o+=c.length; }
+      got[key]=SIZE[key]; bump();
+      return out;
+    }catch(e){ clearTimeout(timer); lastErr=(e?.name==="AbortError") ? new Error("Failed to fetch (timeout) "+u) : e; }
+  }
+  throw lastErr;
+}
 let mpPromise=null;
 function loadLandmarker(){
   if(!mpPromise){
     mpPromise=(async()=>{
-      let lastErr;
-      for(const s of SRC){ for(const delegate of ["GPU","CPU"]){
-        try{
-          const {HandLandmarker, FilesetResolver}=await import(s.mod);
-          const vision=await FilesetResolver.forVisionTasks(s.wasm);
-          return await HandLandmarker.createFromOptions(vision,{
-            baseOptions:{modelAssetPath:s.model, delegate}, runningMode:"VIDEO", numHands:2,
-            minHandDetectionConfidence:.4, minHandPresenceConfidence:.4, minTrackingConfidence:.4});
-        }catch(e){ lastErr=e; }
-      }}
+      const modelP=fetchBytes(MODEL_URLS,"model"); modelP.catch(()=>{});      // langsung mulai, tidak menunggu yang lain
+      let mp, lastErr;
+      for(const m of MODS){ try{ mp=await import(m); break; }catch(e){ lastErr=e; } }
+      if(!mp) throw lastErr;
+      const {HandLandmarker, FilesetResolver}=mp;
+      const simd=await FilesetResolver.isSimdSupported();
+      const name=simd ? "vision_wasm_internal" : "vision_wasm_nosimd_internal";
+      const [model,wasm]=await Promise.all([modelP, fetchBytes(WASM_DIRS.map(d=>d+"/"+name+".wasm"),"wasm")]);
+      const vision={wasmLoaderPath:"lib/wasm/"+name+".js",
+                    wasmBinaryPath:URL.createObjectURL(new Blob([wasm],{type:"application/wasm"}))};
+      for(const delegate of ["GPU","CPU"]){
+        for(const loader of ["lib/wasm/"+name+".js", CDN+"/wasm/"+name+".js"]){
+          try{
+            const lm=await HandLandmarker.createFromOptions({...vision, wasmLoaderPath:loader},{
+              baseOptions:{modelAssetBuffer:model, delegate}, runningMode:"VIDEO", numHands:2,
+              minHandDetectionConfidence:.4, minHandPresenceConfidence:.4, minTrackingConfidence:.4});
+            loadPct=100; onLoadPct?.(100);
+            return lm;
+          }catch(e){ lastErr=e; }
+        }
+      }
       throw lastErr;
     })();
     mpPromise.catch(()=>{ mpPromise=null; });
   }
   return mpPromise;
 }
+loadLandmarker().catch(()=>{});                                // mulai mengunduh sedini mungkin
 
 const $=id=>document.getElementById(id);
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
@@ -270,77 +306,6 @@ function setSolid(v){ solidMode=v; solids.forEach(m=>m.visible=v); decals.forEac
   $("bSolid").textContent="TAMPILAN: "+(v?"NYATA":"HOLOGRAM"); }
 
 /* ---------- objek hologram ---------- */
-function buildGlobe(){
-  const g=new THREE.Group();
-  g.add(part(grp(wire(new THREE.SphereGeometry(1.5,24,16),CY,.2),
-                 dots(new THREE.IcosahedronGeometry(1.52,5),WH,.03,.8)),{spin:[0,.18,0],grow:.3}));
-  g.add(part(grp(edges(new THREE.IcosahedronGeometry(.7,1),OR,.9),
-                 dots(new THREE.IcosahedronGeometry(.7,1),OR,.06)),{spin:[.3,.5,0]}));
-  [[2.0,.5,.2,.5,.55],[2.35,-.9,1.1,-.35,-.6],[2.75,1.25,-.5,.25,1.0]].forEach(([r,tx,tz,sp,dy])=>{
-    const sat=edges(new THREE.OctahedronGeometry(.1),OR,1); sat.position.set(r,0,0);
-    const o=part(grp(ring(r,CY,.55),sat),{spin:[0,sp,0],dir:[0,dy,0],grow:.3});
-    o.rotation.x=tx; o.rotation.z=tz; g.add(o);
-  });
-  return g;
-}
-function buildReactor(){
-  const g=new THREE.Group();
-  const cyl=(r,h,n)=>new THREE.CylinderGeometry(r,r,h,n);
-  const torus=(r,t,a,b)=>{ const q=new THREE.TorusGeometry(r,t,a,b); q.rotateX(Math.PI/2); return q; };
-  g.add(part(grp(edges(cyl(.45,.3,24),WH,.9), dots(cyl(.3,.1,12),OR,.07)),{spin:[0,1.4,0]}));
-  g.add(part(wire(torus(.8,.1,8,40),CY,.45),{spin:[0,-.6,0],dir:[0,.45,0]}));
-  const coils=new THREE.Group();
-  for(let i=0;i<10;i++){ const a=i/10*TAU, b=edges(new THREE.BoxGeometry(.3,.34,.5),OR,.9);
-    b.position.set(Math.cos(a)*1.25,0,Math.sin(a)*1.25); b.lookAt(0,0,0); coils.add(b); }
-  g.add(part(coils,{spin:[0,.35,0],dir:[0,-.45,0]}));
-  g.add(part(wire(torus(1.75,.07,6,64),CY,.4),{spin:[0,.2,0],dir:[0,-1.2,0]}));
-  const top=edges(cyl(1.0,.06,6),CY,.9); top.position.y=.3;
-  g.add(part(top,{spin:[0,-.25,0],dir:[0,1.4,0]}));
-  const top2=edges(cyl(.55,.05,3),WH,.8); top2.position.y=.5;
-  g.add(part(top2,{spin:[0,.7,0],dir:[0,2.1,0]}));
-  const bot=edges(cyl(1.4,.06,8),CY,.9); bot.position.y=-.3;
-  g.add(part(bot,{spin:[0,.25,0],dir:[0,-2.0,0]}));
-  g.add(part(dashRing(2.15,16,OR,.7),{spin:[0,-.3,0],grow:.25}));
-  return g;
-}
-function buildDNA(){
-  const g=new THREE.Group();
-  const Hh=4.4, turns=2.2, r=.75, steps=48, chunks=4, per=steps/chunks;
-  const at=(i,ph)=>{ const u=i/steps, a=u*turns*TAU+ph; return new V3(Math.cos(a)*r,(u-.5)*Hh,Math.sin(a)*r); };
-  for(let c=0;c<chunks;c++){
-    const A=[],B=[],r1=[],r2=[],nodes=[];
-    for(let i=c*per;i<=(c+1)*per;i++){
-      const a=at(i,0), b=at(i,Math.PI); A.push(a); B.push(b);
-      if(i%2===0 && i<(c+1)*per){ const m=a.clone().lerp(b,.5); r1.push(a,m); r2.push(m,b); nodes.push(a,b); }
-    }
-    const geo=p=>new THREE.BufferGeometry().setFromPoints(p);
-    g.add(part(grp(new THREE.Line(geo(A),lmat(CY,.95)), new THREE.Line(geo(B),lmat(CY,.95)),
-      new THREE.LineSegments(geo(r1),lmat(WH,.5)), new THREE.LineSegments(geo(r2),lmat(OR,.7)),
-      dots(geo(nodes),WH,.08)),{spin:[0,.45,0],dir:[0,(c-1.5)*.4,0]}));
-  }
-  [1,-1].forEach(s=>{ const o=grp(ring(1.25,CY,.7),dashRing(1.45,12,OR,.6)); o.position.y=s*2.45;
-    g.add(part(o,{spin:[0,-.5*s,0],dir:[0,s*.8,0]})); });
-  return g;
-}
-function buildCube(){
-  const g=new THREE.Group();
-  const box=s=>new THREE.BoxGeometry(s,s,s);
-  g.add(part(edges(box(2.6),CY,.5)));
-  g.add(part(edges(box(1.7),OR,.9),{spin:[-.2,.3,.1]}));
-  g.add(part(grp(edges(box(.9),WH,.95),dots(box(.9),WH,.09)),{spin:[.5,-.4,.25]}));
-  for(const x of [-1,1]) for(const y of [-1,1]) for(const z of [-1,1]){
-    const c=edges(box(.34),CY,.95); c.position.set(x*1.3,y*1.3,z*1.3);
-    g.add(part(c,{dir:[x*.85,y*.85,z*.85],spin:[.6*x,.6*y,0]}));
-  }
-  [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]].forEach(n=>{
-    const p=grp(edges(new THREE.PlaneGeometry(1.5,1.5),CY,.7), edges(new THREE.PlaneGeometry(.7,.7),OR,.8));
-    p.position.set(n[0]*1.3,n[1]*1.3,n[2]*1.3); p.lookAt(n[0]*3,n[1]*3,n[2]*3);
-    g.add(part(p,{dir:[n[0]*1.5,n[1]*1.5,n[2]*1.5]}));
-  });
-  return g;
-}
-/* Router MikroTik hAP lite (model tower RB941-2nD-TC): tiap komponen punya label yang muncul saat diurai.
-   Sumbu: Y = tinggi, Z+ = sisi depan (port), X+ = sisi biru. PCB berdiri tegak sejajar sisi casing. */
 function buildRouter(){
   const g=new THREE.Group(), GR=0x3dff9e, PX=-.36;          // PX = posisi PCB pada sumbu X
   const box=(w,h,d)=>new THREE.BoxGeometry(w,h,d);
@@ -434,8 +399,7 @@ function buildRouter(){
       [PX,0,-.05],{},"PCB (papan sirkuit)","Tempat semua komponen terpasang",[0,-1.4,-1.0]); }
   return g;
 }
-const OBJECTS=[{name:"ROUTER",build:buildRouter,still:true,view:[.3,-.65]},{name:"BUMI",build:buildGlobe},{name:"REAKTOR",build:buildReactor},
-               {name:"DNA",build:buildDNA},{name:"KUBUS",build:buildCube}];
+const OBJECTS=[{name:"ROUTER",build:buildRouter,still:true,view:[.3,-.65]}];
 
 /* ---------- panggung ---------- */
 const holo=new THREE.Group(); holo.rotation.order="ZXY"; scene.add(holo);
@@ -593,6 +557,7 @@ function updateLabels(){
 
 OBJECTS.forEach((o,i)=>{ const b=document.createElement("button"); b.textContent=o.name;
   b.onclick=()=>setObj(i); $("tabs").appendChild(b); });
+if(OBJECTS.length<2) $("tabs").style.display="none";
 setObj(0); appear=1;
 
 /* ================= loop gambar ================= */
@@ -646,7 +611,6 @@ function animate(now){
   }
 }
 requestAnimationFrame(animate);
-setTimeout(()=>{ loadLandmarker().catch(()=>{}); },300);
 
 /* ================= kamera + pelacakan tangan ================= */
 let landmarker=null, running=false, lastT=-1;
@@ -687,12 +651,16 @@ async function start(){
     if(!navigator.mediaDevices?.getUserMedia) throw new Error("Browser ini tidak mendukung kamera (butuh HTTPS atau localhost).");
     stream=await openCam(savedCam());
     cam.srcObject=stream; await cam.play(); cam.classList.add("on");
-    $("msg").textContent="Memuat model AI pelacak tangan…";
+    // langsung masuk: hologram sudah bisa dipakai dengan mouse selagi pelacak tangan selesai dimuat
+    $("boot").classList.add("hide"); $("msg").textContent="";
+    const show=p=>{ $("stat").textContent=p<99 ? "MEMUAT PELACAK TANGAN "+p+"%" : "MENYIAPKAN PELACAK…"; };
+    onLoadPct=show; show(loadPct);
     landmarker=await modelP;
+    onLoadPct=null;
     running=true; $("led").classList.add("on"); $("stat").textContent="PELACAKAN AKTIF";
-    $("boot").classList.add("hide");
     trackLoop();
   }catch(e){
+    onLoadPct=null; $("stat").textContent="KAMERA MATI"; $("boot").classList.remove("hide");
     if(stream){ stream.getTracks().forEach(t=>t.stop()); cam.srcObject=null; cam.classList.remove("on"); }
     let m=e?.message||String(e);
     if(/Permission|NotAllowed/i.test(m)) m="Akses kamera ditolak. Izinkan lewat ikon gembok di address bar, lalu muat ulang.";
@@ -884,7 +852,7 @@ function trackLoop(){
   }
 
   // ✌️ ditahan → objek berikutnya
-  const peace=hands.find(h=>h.pose==="peace");
+  const peace=OBJECTS.length>1 ? hands.find(h=>h.pose==="peace") : null;   // ganti objek hanya kalau objeknya lebih dari satu
   if(peace && !grabbing){
     if(peaceArmed){ peaceT+=dt; modeTxt="GANTI";
       if(peaceT>=.45){ setObj(curIdx+1); peaceArmed=false; peaceT=0; } }
